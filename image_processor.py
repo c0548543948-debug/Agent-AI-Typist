@@ -56,13 +56,14 @@ SUPPORTED_IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".webp"}
 # פונקציה ראשית
 # ============================================================
 
-def prepare_images(input_path: str, dpi: int = 300) -> list[ProcessedImage]:
+def prepare_images(input_path: str, dpi: int = 300, skip_preprocess: bool = False) -> list[ProcessedImage]:
     """
     הפונקציה המרכזית של המודול.
     מקבלת נתיב קובץ ומחזירה רשימת ProcessedImage מוכנות לתמלול.
 
-    input_path — נתיב לקובץ PDF, JPG, PNG או WEBP
-    dpi        — רזולוציה להמרת PDF (300 = באיכות טובה לכתב יד)
+    input_path       — נתיב לקובץ PDF, JPG, PNG או WEBP
+    dpi              — רזולוציה להמרת PDF (300 = באיכות טובה לכתב יד)
+    skip_preprocess  — אם True, שולחים את התמונה כפי שהיא ללא עיבוד
     """
     path = Path(input_path)
 
@@ -86,15 +87,28 @@ def prepare_images(input_path: str, dpi: int = 300) -> list[ProcessedImage]:
     results = []
     for i, img in enumerate(pil_images, start=1):
         logger.info(f"מעבד עמוד {i}/{len(pil_images)}")
-        processed, was_deskewed = _preprocess(img)
-        results.append(ProcessedImage(
-            page_number=i,
-            image=processed,
-            source_path=str(path),
-            was_deskewed=was_deskewed,
-        ))
-        if was_deskewed:
-            logger.warning(f"עמוד {i}: זוהה סיבוב — בוצע תיקון")
+
+        if skip_preprocess:
+            # ללא עיבוד — רק תיקון EXIF ושמירת גודל
+            img = _fix_exif_rotation(img)
+            img = _limit_size(img)
+            results.append(ProcessedImage(
+                page_number=i,
+                image=img,
+                source_path=str(path),
+                was_deskewed=False,
+            ))
+            logger.debug(f"עמוד {i}: דולג על עיבוד מקדים")
+        else:
+            processed, was_deskewed = _preprocess(img)
+            results.append(ProcessedImage(
+                page_number=i,
+                image=processed,
+                source_path=str(path),
+                was_deskewed=was_deskewed,
+            ))
+            if was_deskewed:
+                logger.warning(f"עמוד {i}: זוהה סיבוב — בוצע תיקון")
 
     return results
 
@@ -131,13 +145,21 @@ def _preprocess(img: Image.Image) -> tuple[Image.Image, bool]:
     מקבלת תמונת PIL גולמית ומחזירה תמונה נקייה יותר + האם בוצע deskew.
 
     שלבי העיבוד:
+    0. תיקון EXIF — תמונות מצלמה/טלפון מכילות מטאדאטה של סיבוב.
+       Pillow לא תמיד מיישם אותו אוטומטית.
     1. המרה ל-numpy (cv2 עובד עם numpy, לא PIL)
-    2. המרה לגווני אפור — מפשטת את הניתוח, cv2 לא צריך צבע לזיהוי זוויות
-    3. תיקון סיבוב (deskew) — דף שנסרק בזווית יגרום לשגיאות תמלול
-    4. שיפור ניגודיות (CLAHE) — מוציאה פרטים מדיו דהוי
-    5. הפחתת רעש — Gaussian blur קל מסיר פיקסלים בודדים רועשים
-    6. חזרה ל-PIL + הגבלת גודל ל-Gemini
+    2. המרה לגווני אפור
+    3. תיקון סיבוב גדול (90°/180°/270°) לפי יחס גובה-רוחב
+    4. תיקון סיבוב קטן (deskew ±15°)
+    5. שיפור ניגודיות (CLAHE)
+    6. הפחתת רעש
+    7. חזרה ל-PIL + הגבלת גודל ל-Gemini
     """
+
+    # --- שלב 0: תיקון EXIF ---
+    # טלפונים מצלמים לרוחב ושומרים בתגית EXIF "סובב 90°".
+    # אם Pillow לא מיישם את זה, התמונה מגיעה הפוכה ל-Gemini.
+    img = _fix_exif_rotation(img)
 
     # --- שלב 1: PIL → numpy BGR (פורמט cv2) ---
     arr = np.array(img)
@@ -171,6 +193,23 @@ def _preprocess(img: Image.Image) -> tuple[Image.Image, bool]:
     return result_pil, was_deskewed
 
 
+def _fix_exif_rotation(img: Image.Image) -> Image.Image:
+    """
+    מתקנת סיבוב שמקורו בנתוני EXIF של התמונה.
+
+    מצלמות טלפון מצלמות לרוחב ושומרות "Orientation: 90" ב-EXIF.
+    כשפותחים עם Pillow, התמונה מגיעה מסובבת — אלא אם מיישמים את ה-EXIF.
+    ImageOps.exif_transpose() קורא את תגית ה-Orientation ומסובב בחזרה.
+    """
+    from PIL import ImageOps
+    try:
+        img = ImageOps.exif_transpose(img)
+        logger.debug("תיקון EXIF הוחל")
+    except Exception:
+        pass  # אם אין EXIF — ממשיכים כרגיל
+    return img
+
+
 def _deskew(gray: np.ndarray) -> tuple[np.ndarray, bool]:
     """
     מזהה זווית הטיה בתמונת גווני אפור ומתקנת אם הסיבוב מעל 0.5°.
@@ -190,7 +229,7 @@ def _deskew(gray: np.ndarray) -> tuple[np.ndarray, bool]:
 
     angles = []
     for line in lines:
-        x1, y1, x2, y2 = line[0]
+        x1, y1, x2, y2 = line.flatten()
         if x2 - x1 == 0:
             continue
         angle = math.degrees(math.atan2(y2 - y1, x2 - x1))

@@ -26,7 +26,7 @@ class AppConfig(BaseModel):
 
     # ===== Gemini API =====
     api_key: str = Field(default_factory=lambda: os.getenv("GEMINI_API_KEY", ""))
-    model: str = Field(default_factory=lambda: os.getenv("GEMINI_MODEL", "gemini-1.5-flash"))
+    model: str = Field(default_factory=lambda: os.getenv("GEMINI_MODEL", "gemini-2.5-flash"))
 
     # ===== עיבוד תמונה =====
     render_dpi: int = Field(default_factory=lambda: int(os.getenv("RENDER_DPI", "300")))

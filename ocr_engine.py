@@ -114,17 +114,18 @@ def load_few_shot_samples(few_shot_dir: str, max_samples: int) -> list[FewShotSa
 # ============================================================
 
 # הפרומפט המערכתי — נשלח בכל בקשה
-SYSTEM_PROMPT = """אתה מומחה תמלול כתב יד. תפקידך לקרוא טקסט כתוב בכתב יד מתמונה ולהפיק תמלול נקי ומדויק.
+SYSTEM_PROMPT = """You are a handwriting transcription specialist. Your ONLY job is to read and transcribe exactly what is physically written in the image — nothing more, nothing less.
 
-כללים:
-1. תמלל את הטקסט בדיוק כפי שנכתב. אל תנסח מחדש, תסכם או תתקן את המשמעות.
-2. הוסף סימני פיסוק (נקודות, פסיקים, סימני שאלה) במקומות טבעיים — רק אם הם ברורים מהכתיבה.
-3. שמור על מעברי פסקאות. השתמש בשורה ריקה בין פסקאות.
-4. אם מילה אינה ברורה ורמת הביטחון שלך נמוכה, כתוב אותה כ-[ניחוש?] — החלף "ניחוש" בניחושך הטוב ביותר. לדוגמה: [שלום?] או [הבית?].
-5. אם קטע שלם אינו קריא לחלוטין, כתוב [לא קריא].
-6. המסמך עשוי להיות בעברית, אנגלית, או שניהם. שמור על שפת המקור של כל מילה — אל תתרגם.
-7. טקסט עברי זורם מימין לשמאל; טקסט אנגלי זורם משמאל לימין. תמלל כפי שנכתב.
-8. פלוט את הטקסט המתומלל בלבד. ללא הסברים, כותרות, או הערות נוספות."""
+STRICT RULES:
+1. Transcribe ONLY what you can actually see written in the image. Do NOT add, invent, complete, or guess any content that is not clearly visible.
+2. Go line by line, in the exact order the text appears in the image.
+3. Preserve the original language of every word. The text may be Hebrew, English, or mixed. Do NOT translate.
+4. Preserve paragraph breaks. Use a blank line between paragraphs.
+5. If a word is unclear or you are not confident, write it as [word?] — replace "word" with your best guess. Example: [שלום?] or [hello?].
+6. If an entire section is completely unreadable, write [unreadable].
+7. Do NOT add punctuation that is not clearly written in the image.
+8. Do NOT fix spelling or grammar.
+9. Output ONLY the transcribed text. No explanations, no commentary, no headers."""
 
 
 def _build_contents(
@@ -147,9 +148,9 @@ def _build_contents(
     # הוספת הנחיית שפה לפרומפט
     system = SYSTEM_PROMPT
     if language_mode == "he":
-        system += "\n\nהערה: המסמך בעברית בלבד. כל הטקסט RTL."
+        system += "\n\nNote: The document is in Hebrew only."
     elif language_mode == "en":
-        system += "\n\nNote: The document is in English only. All text is LTR."
+        system += "\n\nNote: The document is in English only."
 
     contents.append(system)
 
@@ -159,7 +160,7 @@ def _build_contents(
         contents.append(f"תמלול:\n{sample.transcript}")   # התמלול הנכון שלה
 
     # הוספת ההנחיה לתמלול + התמונה החדשה
-    contents.append("תמלל את הכתב יד בתמונה הבאה:")
+    contents.append("Transcribe ONLY what is physically written in the following image, line by line:")
     contents.append(image)
 
     return contents

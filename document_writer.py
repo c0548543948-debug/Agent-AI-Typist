@@ -44,6 +44,9 @@ def create_docx(
     """
     doc = Document()
 
+    # הגדרת RTL ברמת המסמך כולו — זה מה שגורם ל-Word לכבד RTL
+    _set_document_rtl_defaults(doc)
+
     # הגדרת שוליים קטנים יותר — ברירת המחדל של Word רחבה מדי
     _set_margins(doc, top=1.0, bottom=1.0, left=1.2, right=1.2)
 
@@ -137,6 +140,27 @@ UNCERTAIN_PATTERN = re.compile(r'(\[[^\]]+\?\])')
 מחפשת: [כלשהו?] — סוגריים מרובעות עם סימן שאלה בסוף.
 """
 
+LEADING_PUNCT = re.compile(r'^([!?.،؟]+)(.*)')
+"""תבנית לסימני פיסוק בתחילת שורה עברית — צריך להזיז אותם לסוף."""
+
+
+def _fix_hebrew_punctuation(text: str) -> str:
+    """
+    מתקנת מיקום סימני פיסוק בפסקה עברית.
+
+    Gemini מתמלל "!היי שלום" עם "!" בהתחלה של המחרוזת הלוגית.
+    בפסקה ממויינת ימין (ללא RTL אמיתי), "!" מגיע לפני הטקסט — שגיאה ויזואלית.
+    הפתרון: "!היי שלום" → "היי שלום!" כך שה-! יופיע בסוף.
+    """
+    fixed_lines = []
+    for line in text.split('\n'):
+        m = LEADING_PUNCT.match(line.strip())
+        if m:
+            punct, rest = m.group(1), m.group(2).strip()
+            line = rest + punct if rest else punct
+        fixed_lines.append(line)
+    return '\n'.join(fixed_lines)
+
 
 def _add_paragraph(
     doc: Document,
@@ -151,17 +175,12 @@ def _add_paragraph(
     לכל חלק לא-ודאי מוסיפה הדגשת רקע צהובה.
     מחזירה כמות מילים לא-ודאיות בפסקה.
     """
-    para = doc.add_paragraph()
-
-    # הגדרת כיווניות RTL/LTR ברמת ה-XML של Word
-    # זה מה שגורם ל-Word להציג את הפסקה בכיוון הנכון
-    _set_paragraph_direction(para, direction)
-
-    # יישור: ימין לעברית, שמאל לאנגלית
+    # תיקון מיקום סימני פיסוק בעברית
     if direction == "rtl":
-        para.alignment = WD_ALIGN_PARAGRAPH.RIGHT
-    else:
-        para.alignment = WD_ALIGN_PARAGRAPH.LEFT
+        text = _fix_hebrew_punctuation(text)
+
+    para = doc.add_paragraph()
+    _set_paragraph_direction(para, direction)
 
     # פיצול הטקסט לחלקים לפי תבנית [מילה?]
     # דוגמה: "שלום [עולם?] טוב" → ["שלום ", "[עולם?]", " טוב"]
@@ -192,24 +211,20 @@ def _add_paragraph(
 
 def _set_paragraph_direction(para, direction: str) -> None:
     """
-    מגדירה כיווניות RTL/LTR ברמת ה-XML הפנימי של Word.
+    מגדירה יישור לפסקה.
 
-    למה XML ישירות?
-    ספריית python-docx לא חושפת API נוח לכיווניות —
-    צריך לגשת ל-XML הפנימי של קובץ ה-.docx ישירות.
-    Word מאחסן כיווניות בתגית <w:bidi/> בתוך <w:pPr> (paragraph properties).
+    במקום XML מורכב של RTL/bidi שלא עובד באופן עקבי ב-Word,
+    משתמשים ב-API הפשוט של python-docx:
+    - עברית → ישור ימין (RIGHT)
+    - אנגלית → ישור שמאל (LEFT)
+
+    Word מזהה עברית Unicode אוטומטית ומטפל בכיוון האותיות בתוך השורה.
     """
-    pPr = para._p.get_or_add_pPr()
-
     if direction == "rtl":
-        # הוספת <w:bidi/> — מסמן את הפסקה כ-RTL
-        bidi = OxmlElement('w:bidi')
-        pPr.append(bidi)
+        para.alignment = WD_ALIGN_PARAGRAPH.RIGHT
     else:
-        # הסרת bidi אם קיים (LTR הוא ברירת המחדל)
-        existing = pPr.find(qn('w:bidi'))
-        if existing is not None:
-            pPr.remove(existing)
+        para.alignment = WD_ALIGN_PARAGRAPH.LEFT
+
 
 
 def _highlight_yellow(run) -> None:
@@ -301,6 +316,15 @@ def _add_summary_table(
 # ============================================================
 # שוליים
 # ============================================================
+
+def _set_document_rtl_defaults(doc: Document) -> None:
+    """
+    פונקציה ריקה — לא מגדירים RTL ברמת המסמך.
+    Word מזהה עברית Unicode אוטומטית ומטפל בכיוון האותיות.
+    ישור ימין מוגדר ברמת כל פסקה בנפרד.
+    """
+    pass
+
 
 def _set_margins(doc: Document, top: float, bottom: float, left: float, right: float) -> None:
     """
