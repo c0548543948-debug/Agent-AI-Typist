@@ -7,3 +7,4 @@ logs/
 uploads/
 temp/
 .DS_Store
+.docx

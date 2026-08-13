@@ -121,11 +121,12 @@ STRICT RULES:
 2. Go line by line, in the exact order the text appears in the image.
 3. Preserve the original language of every word. The text may be Hebrew, English, or mixed. Do NOT translate.
 4. Preserve paragraph breaks. Use a blank line between paragraphs.
-5. If a word is unclear or you are not confident, write it as [word?] — replace "word" with your best guess. Example: [שלום?] or [hello?].
+5. If a word is unclear or you are not fully confident, write it as [word?] — replace "word" with your best guess. When in doubt, always prefer marking [word?] over writing a word that might be wrong. Over-marking uncertainty is always better than inventing content.
 6. If an entire section is completely unreadable, write [unreadable].
 7. Do NOT add punctuation that is not clearly written in the image.
 8. Do NOT fix spelling or grammar.
-9. Output ONLY the transcribed text. No explanations, no commentary, no headers."""
+9. Output ONLY the transcribed text. No explanations, no commentary, no headers.
+10. Do NOT use surrounding context to guess unclear words. Each word must be readable on its own in the image. Unusual or archaic words must be copied exactly as written — never modernize or "correct" them."""
 
 
 def _build_contents(
@@ -154,13 +155,20 @@ def _build_contents(
 
     contents.append(system)
 
-    # הוספת דוגמאות Few-Shot
+    # הוספת דוגמאות Few-Shot — לכיול סגנון כתיבה בלבד
+    if few_shot_samples:
+        contents.append(
+            "The following examples show this person's handwriting style. "
+            "Study them to learn how this person forms letters and words. "
+            "WARNING: The content of these examples is completely unrelated to the new image. "
+            "Do NOT assume any words, phrases, or topics from these examples appear in the new image."
+        )
     for sample in few_shot_samples:
-        contents.append(sample.image)          # תמונת דוגמה
-        contents.append(f"תמלול:\n{sample.transcript}")   # התמלול הנכון שלה
+        contents.append(sample.image)
+        contents.append(f"Example transcription (unrelated content):\n{sample.transcript}")
 
     # הוספת ההנחיה לתמלול + התמונה החדשה
-    contents.append("Transcribe ONLY what is physically written in the following image, line by line:")
+    contents.append("Now transcribe ONLY what is physically written in the NEW image below. Do NOT reuse or reference any content from the example images above — those were only for learning letter shapes. Transcribe line by line:")
     contents.append(image)
 
     return contents
@@ -247,6 +255,26 @@ def transcribe_image(
         elapsed_ms = int((time.monotonic() - start) * 1000)
 
         raw_text = response.text or ""
+
+        # לוג מפורט לאבחון תשובות ריקות
+        if not raw_text:
+            finish = None
+            parts_info = None
+            try:
+                candidate = response.candidates[0]
+                finish = candidate.finish_reason
+                parts = candidate.content.parts
+                parts_info = [(type(p).__name__, getattr(p, 'text', None)) for p in parts]
+                # נסיון לשלוף טקסט ישירות מparts
+                raw_text = "".join(p.text for p in parts if hasattr(p, 'text') and p.text)
+            except Exception as e:
+                logger.debug(f"שגיאה בשליפת parts: {e}")
+            logger.warning(
+                f"עמוד {processed.page_number}: תשובה ריקה! "
+                f"finish_reason={finish}, parts={parts_info}, "
+                f"טקסט משוחזר={len(raw_text)} תווים"
+            )
+
         logger.info(
             f"עמוד {processed.page_number}: התקבל תמלול "
             f"({len(raw_text)} תווים, {elapsed_ms}ms)"
