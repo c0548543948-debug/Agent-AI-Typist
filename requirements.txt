@@ -1,4 +1,10 @@
-google-genai>=0.8.0
+# NOTE: keep this file ASCII-only.
+# pip on Windows may read requirements.txt using the local codepage
+# (e.g. cp1255 for Hebrew), which fails on non-ASCII characters.
+
+# google-genai must be a modern version: thinking_level and
+# media_resolution are Gemini 3 parameters missing from older releases.
+google-genai>=2.18.0
 pdf2image>=1.17.0
 Pillow>=10.0.0
 opencv-python>=4.9.0
