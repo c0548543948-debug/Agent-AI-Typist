@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<title>הגהה — עמוד {{ page_id }}</title>
+<style>
+  :root{
+    --bg:#f6f5f2; --card:#fff; --ink:#1c1c1a; --muted:#77736c;
+    --line:#e3e0da; --accent:#2f5d50; --warn:#f5d90a; --sic:#c2601f;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+       font-family:"Segoe UI",system-ui,Arial,sans-serif}
+  header{position:sticky;top:0;z-index:10;background:var(--card);
+         border-bottom:1px solid var(--line);padding:10px 20px;
+         display:flex;align-items:center;gap:20px;flex-wrap:wrap}
+  header h1{font-size:16px;margin:0;font-weight:600}
+  .bar{flex:1;min-width:180px;height:8px;background:var(--line);border-radius:99px;overflow:hidden}
+  .bar span{display:block;height:100%;background:var(--accent)}
+  .muted{color:var(--muted);font-size:13px}
+  a{color:var(--accent)}
+
+  main{max-width:1180px;margin:0 auto;padding:16px 20px 120px}
+
+  .row{background:var(--card);border:1px solid var(--line);border-radius:10px;
+       margin-bottom:14px;overflow:hidden;transition:border-color .15s}
+  .row.active{border-color:var(--accent);box-shadow:0 2px 14px rgba(0,0,0,.07)}
+  .row.done{opacity:.55}
+  .row.done.active{opacity:1}
+
+  .rowhead{display:flex;align-items:center;gap:10px;padding:6px 12px;
+           border-bottom:1px solid var(--line);font-size:12px;color:var(--muted)}
+  .tag{padding:1px 8px;border-radius:99px;font-size:11px;border:1px solid var(--line)}
+  .tag.fix{background:#eaf3ef;color:var(--accent);border-color:#cfe4db}
+  .tag.confirm{background:#eef0ee;color:var(--muted)}
+  .tag.sic{background:#fbeee4;color:var(--sic);border-color:#f0d6c1}
+
+  .imgwrap{background:#fbfaf8;padding:6px 0;overflow-x:auto}
+  .imgwrap img{display:block;max-width:100%;height:auto}
+
+  textarea{width:100%;border:0;border-top:1px solid var(--line);padding:12px 14px;
+           font-family:"David Libre","Times New Roman",serif;font-size:21px;
+           line-height:1.6;direction:rtl;text-align:right;resize:vertical;
+           min-height:58px;outline:none;background:transparent;color:var(--ink)}
+  textarea:focus{background:#fffef7}
+
+  .hint{padding:6px 14px;font-size:12px;color:var(--muted);
+        border-top:1px dashed var(--line);display:none}
+  .row.active .hint{display:block}
+  kbd{background:#efece6;border:1px solid var(--line);border-bottom-width:2px;
+      border-radius:4px;padding:1px 6px;font-size:11px;font-family:inherit}
+
+  footer{position:fixed;bottom:0;right:0;left:0;background:var(--card);
+         border-top:1px solid var(--line);padding:8px 20px;font-size:12px;
+         color:var(--muted);display:flex;gap:18px;flex-wrap:wrap;align-items:center}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>הגהה — עמוד {{ page_id }}</h1>
+  <div class="bar"><span id="pbar" style="width:{{ (100*done/lines|length)|round(0) }}%"></span></div>
+  <div class="muted"><b id="done">{{ done }}</b> / {{ lines|length }} שורות</div>
+  <div class="muted">קורפוס: <b id="words">{{ stats.words }}</b> / 10,000 מילים</div>
+  <a href="/">חזרה</a>
+</header>
+
+<main>
+{% for l in lines %}
+  <div class="row {% if l.reviewed %}done{% endif %}" data-id="{{ l.id }}" id="row{{ loop.index0 }}">
+    <div class="rowhead">
+      <span>שורה {{ l.idx }}</span>
+      <span class="tag {{ l.kind }}" data-tag>{{ {'fix':'תוקן','confirm':'אושר','sic':'כך במקור'}.get(l.kind,'') }}</span>
+    </div>
+    <div class="imgwrap"><img src="/img/line/{{ l.id }}" alt="שורה {{ l.idx }}" loading="lazy"></div>
+    <textarea rows="1" spellcheck="false">{{ l.correction if l.correction else l.prediction }}</textarea>
+    <div class="hint">
+      <kbd>Enter</kbd> שמור והמשך &nbsp;·&nbsp;
+      <kbd>Shift</kbd>+<kbd>Enter</kbd> שורה חדשה בתוך הטקסט &nbsp;·&nbsp;
+      <kbd>Ctrl</kbd>+<kbd>S</kbd> כך במקור — שגיאה של הכותב &nbsp;·&nbsp;
+      <kbd>Esc</kbd> דלג
+    </div>
+  </div>
+{% endfor %}
+</main>
+
+<footer>
+  <span><kbd>Enter</kbd> שמור והמשך</span>
+  <span><kbd>Ctrl</kbd>+<kbd>S</kbd> כך במקור</span>
+  <span><kbd>Esc</kbd> דלג</span>
+  <span style="margin-inline-start:auto"><a href="/export">ייצוא לאימון</a></span>
+</footer>
+
+<script>
+const rows = [...document.querySelectorAll('.row')];
+let cur = rows.findIndex(r => !r.classList.contains('done'));
+if (cur < 0) cur = 0;
+
+function fit(ta){ ta.style.height='auto'; ta.style.height=(ta.scrollHeight+2)+'px'; }
+rows.forEach(r => { const t=r.querySelector('textarea'); fit(t); t.addEventListener('input',()=>fit(t)); });
+
+function focusRow(i){
+  if (i<0 || i>=rows.length) return;
+  rows.forEach(r=>r.classList.remove('active'));
+  cur = i;
+  const r = rows[cur];
+  r.classList.add('active');
+  const t = r.querySelector('textarea');
+  t.focus();
+  t.setSelectionRange(t.value.length, t.value.length);
+  r.scrollIntoView({block:'center', behavior:'smooth'});
+}
+
+async function save(i, kind, note){
+  const r = rows[i];
+  const text = r.querySelector('textarea').value;
+  const res = await fetch('/api/save', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({line_id: r.dataset.id, text, kind, note: note||''})
+  });
+  const data = await res.json();
+  if (!r.classList.contains('done')) {
+    r.classList.add('done');
+    const d = document.getElementById('done');
+    d.textContent = (+d.textContent) + 1;
+    document.getElementById('pbar').style.width =
+      (100*(+d.textContent)/rows.length) + '%';
+  }
+  const tag = r.querySelector('[data-tag]');
+  tag.className = 'tag ' + kind;
+  tag.textContent = {fix:'תוקן', confirm:'אושר', sic:'כך במקור'}[kind] || '';
+  document.getElementById('words').textContent = data.stats.words;
+}
+
+document.addEventListener('keydown', async e => {
+  const inTextarea = e.target.tagName === 'TEXTAREA';
+  if (!inTextarea) return;
+
+  // Enter — שמירה והמשך. Shift+Enter נשאר שורה חדשה רגילה.
+  if (e.key === 'Enter' && !e.shiftKey && !e.ctrlKey) {
+    e.preventDefault();
+    const r = rows[cur];
+    const orig = r.querySelector('textarea').defaultValue.trim();
+    const now  = r.querySelector('textarea').value.trim();
+    await save(cur, now === orig ? 'confirm' : 'fix');
+    focusRow(cur + 1);
+  }
+
+  // Ctrl+S — התמלול נכון, אבל בדף עצמו יש שגיאה
+  if (e.key.toLowerCase() === 's' && e.ctrlKey) {
+    e.preventDefault();
+    const note = prompt('התמלול נכון והשגיאה במקור.\nמה הצורה הנכונה? (רק לקריאה — לא ייכנס לאימון)');
+    if (note !== null) { await save(cur, 'sic', note); focusRow(cur + 1); }
+  }
+
+  if (e.key === 'Escape') { e.preventDefault(); focusRow(cur + 1); }
+});
+
+rows.forEach((r,i) => r.querySelector('textarea')
+                       .addEventListener('focus', () => focusRow(i)));
+focusRow(cur);
+</script>
+</body>
+</html>

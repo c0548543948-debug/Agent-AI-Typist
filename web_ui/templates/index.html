@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<title>AI-Typist — הגהה ואיסוף</title>
+<style>
+  :root{--bg:#f6f5f2;--card:#fff;--ink:#1c1c1a;--muted:#77736c;--line:#e3e0da;--accent:#2f5d50}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+       font-family:"Segoe UI",system-ui,Arial,sans-serif}
+  main{max-width:880px;margin:0 auto;padding:34px 22px 80px}
+  h1{font-size:22px;margin:0 0 4px}
+  .sub{color:var(--muted);font-size:14px;margin-bottom:26px}
+  .card{background:var(--card);border:1px solid var(--line);
+        border-radius:12px;padding:20px;margin-bottom:20px}
+  .bar{height:10px;background:var(--line);border-radius:99px;overflow:hidden;margin:10px 0 6px}
+  .bar span{display:block;height:100%;background:var(--accent)}
+  .big{font-size:26px;font-weight:600}
+  table{width:100%;border-collapse:collapse;font-size:14px}
+  th,td{text-align:right;padding:9px 8px;border-bottom:1px solid var(--line)}
+  th{color:var(--muted);font-weight:500;font-size:12px}
+  a{color:var(--accent)}
+  input[type=file]{margin-left:10px}
+  button{background:var(--accent);color:#fff;border:0;border-radius:8px;
+         padding:9px 18px;font-size:14px;cursor:pointer}
+  .note{background:#eaf3ef;border:1px solid #cfe4db;border-radius:8px;
+        padding:12px 14px;font-size:13px;color:#24483e;margin-bottom:20px}
+</style>
+</head>
+<body>
+<main>
+  <h1>הגהה ואיסוף נתוני אימון</h1>
+  <div class="sub">כל שורה שאת מגיהה נשמרת כזוג של תמונה וטקסט נכון — הבסיס לאימון מודל אישי.</div>
+
+  {% if export %}
+  <div class="note">
+    <b>הייצוא הושלם.</b> {{ export.lines }} שורות, {{ export.words }} מילים →
+    <code>{{ export.out_dir }}</code>
+  </div>
+  {% endif %}
+
+  <div class="card">
+    <div class="muted" style="font-size:13px">התקדמות לקראת אימון</div>
+    <div class="big">{{ stats.words }} <span style="font-size:15px;color:var(--muted)">/ 10,000 מילים</span></div>
+    <div class="bar"><span style="width:{{ stats.progress }}%"></span></div>
+    <div class="muted" style="font-size:12px">
+      {{ stats.pages }} עמודים · {{ stats.lines }} שורות · {{ stats.reviewed }} הוגהו
+      {% if stats.sic %} · {{ stats.sic }} סומנו "כך במקור"{% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <form action="/upload" method="post" enctype="multipart/form-data">
+      <b>העלאת עמוד</b>
+      <div class="muted" style="font-size:13px;margin:6px 0 12px">
+        התמונה תעבור עיבוד, תיחתך לשורות, ותתומלל — ואז תיפתח להגהה.
+      </div>
+      <input type="file" name="file" accept=".jpg,.jpeg,.png,.webp,.pdf" required>
+      <button type="submit">העלה והתחל</button>
+    </form>
+  </div>
+
+  <div class="card">
+    <b>עמודים</b>
+    {% if pages %}
+    <table>
+      <tr><th>#</th><th>מקור</th><th>שורות</th><th>הוגהו</th><th></th></tr>
+      {% for p in pages %}
+      <tr>
+        <td>{{ p.id }}</td>
+        <td>{{ p.source_path }}</td>
+        <td>{{ p.n_lines }}</td>
+        <td>{{ p.reviewed }} / {{ p.n_lines }}</td>
+        <td><a href="/review/{{ p.id }}">הגהה ←</a></td>
+      </tr>
+      {% endfor %}
+    </table>
+    {% else %}
+    <div class="muted" style="font-size:13px;margin-top:8px">עוד לא הועלו עמודים.</div>
+    {% endif %}
+  </div>
+
+  <div style="text-align:center"><a href="/export">ייצוא נתוני אימון</a></div>
+</main>
+</body>
+</html>
